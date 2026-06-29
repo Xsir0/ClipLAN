@@ -4,6 +4,17 @@ ClipLAN is a local-first macOS clipboard history app with fast search, image OCR
 
 It is designed for people who want a private clipboard workflow without cloud sync. Clipboard history, payloads, OCR text, and settings stay on the local machine unless LAN sync is enabled.
 
+## Preview
+
+<p align="center">
+  <img src="docs/images/floating-picker.png" alt="ClipLAN floating clipboard picker" width="720">
+</p>
+
+<p align="center">
+  <img src="docs/images/main-window.png" alt="ClipLAN clipboard history window" width="460">
+  <img src="docs/images/sync-settings.png" alt="ClipLAN LAN sync settings" width="360">
+</p>
+
 ## Features
 
 - Clipboard history for text, URLs, HTML, RTF, images, and files.

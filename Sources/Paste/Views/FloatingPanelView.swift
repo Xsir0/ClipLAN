@@ -1,3 +1,4 @@
+import AppKit
 import PasteCore
 import SwiftUI
 
@@ -19,6 +20,7 @@ struct FloatingPanelView: View {
                         LazyHStack(spacing: 10) {
                             ForEach(model.floatingEntries) { entry in
                                 FloatingEntryTile(
+                                    model: model,
                                     entry: entry,
                                     isSelected: entry.id == model.selectedID
                                 )
@@ -93,10 +95,31 @@ struct FloatingPanelView: View {
 }
 
 private struct FloatingEntryTile: View {
+    @ObservedObject var model: ClipboardAppModel
     let entry: ClipboardEntry
     let isSelected: Bool
 
     var body: some View {
+        Group {
+            if let preview = model.floatingMediaPreview(for: entry) {
+                mediaTile(preview)
+            } else {
+                textTile
+            }
+        }
+        .frame(width: 138, height: 114, alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: entry.id) {
+            await model.loadFloatingMediaPreview(for: entry)
+        }
+    }
+
+    private var textTile: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: entry.type.systemImage)
@@ -132,13 +155,51 @@ private struct FloatingEntryTile: View {
             .lineLimit(1)
         }
         .padding(12)
-        .frame(width: 138, height: 114, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(tileBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.white.opacity(0.18) : Color.primary.opacity(0.04), lineWidth: 1)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func mediaTile(_ preview: FloatingMediaPreview) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Image(nsImage: preview.image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 138, height: 114)
+                .clipped()
+
+            if preview.kind == .fileVideo {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(.black.opacity(0.42), in: Circle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: mediaIconName(for: preview.kind))
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 4) {
+                    Text(entry.type.displayName)
+                    Text("·")
+                    Text(entry.createdAt, style: .relative)
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+            .foregroundStyle(.primary)
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial)
+        }
+        .background(Color.secondary.opacity(0.08))
     }
 
     private var title: String {
@@ -152,5 +213,16 @@ private struct FloatingEntryTile: View {
 
     private var tileBackground: some ShapeStyle {
         isSelected ? AnyShapeStyle(Color.indigo) : AnyShapeStyle(Color.secondary.opacity(0.08))
+    }
+
+    private var borderColor: Color {
+        if model.floatingMediaPreview(for: entry) != nil, isSelected {
+            return .indigo
+        }
+        return isSelected ? Color.white.opacity(0.18) : Color.primary.opacity(0.04)
+    }
+
+    private func mediaIconName(for kind: FloatingMediaKind) -> String {
+        kind == .fileVideo ? "play.rectangle.fill" : "photo.fill"
     }
 }

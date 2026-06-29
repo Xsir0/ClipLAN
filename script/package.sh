@@ -68,6 +68,7 @@ for ARCH in arm64 x86_64; do
     -o "$ARCH_DIR/$APP_NAME" \
     -framework Carbon \
     -framework ApplicationServices \
+    -framework QuickLookThumbnailing \
     -framework ServiceManagement \
     -framework Vision \
     -Xlinker -rpath \

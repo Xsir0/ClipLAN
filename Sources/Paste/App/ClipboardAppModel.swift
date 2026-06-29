@@ -16,6 +16,7 @@ final class ClipboardAppModel: ObservableObject {
     @Published var statusMessage = "Ready"
     @Published var syncStatus = "LAN sync stopped"
     @Published var peers: [PeerDevice] = []
+    @Published private var floatingMediaPreviews: [ClipboardEntry.ID: FloatingMediaPreview] = [:]
     @Published var floatingQuery: String = "" {
         didSet {
             resetFloatingSelection()
@@ -37,6 +38,13 @@ final class ClipboardAppModel: ObservableObject {
     private var pasteTargetApplication: NSRunningApplication?
     private var queuedOCRHashes = Set<String>()
     private var shouldResetFloatingSelectionAfterLoad = false
+    private var queuedFloatingPreviewIDs = Set<ClipboardEntry.ID>()
+    private static let previewableImageExtensions: Set<String> = [
+        "avif", "bmp", "gif", "heic", "heif", "jpeg", "jpg", "png", "tif", "tiff", "webp"
+    ]
+    private static let previewableVideoExtensions: Set<String> = [
+        "avi", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "webm"
+    ]
 
     var filteredEntries: [ClipboardEntry] {
         entries.filter { filter.includes($0) }
@@ -279,6 +287,58 @@ final class ClipboardAppModel: ObservableObject {
             .compactMap { URL(string: String($0)) }
     }
 
+    func mediaPreviewURL(for entry: ClipboardEntry) -> URL? {
+        fileURLs(for: entry).first { url in
+            Self.isPreviewableMediaURL(url)
+        }
+    }
+
+    func isVideoPreviewURL(_ url: URL) -> Bool {
+        Self.previewableVideoExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    func floatingMediaPreview(for entry: ClipboardEntry) -> FloatingMediaPreview? {
+        floatingMediaPreviews[entry.id]
+    }
+
+    func loadFloatingMediaPreview(for entry: ClipboardEntry) async {
+        guard floatingMediaPreviews[entry.id] == nil, !queuedFloatingPreviewIDs.contains(entry.id) else {
+            return
+        }
+
+        queuedFloatingPreviewIDs.insert(entry.id)
+        defer {
+            queuedFloatingPreviewIDs.remove(entry.id)
+        }
+
+        if entry.type == .image {
+            guard let image = image(for: entry) else {
+                return
+            }
+            floatingMediaPreviews[entry.id] = FloatingMediaPreview(image: image, kind: .clipboardImage)
+            return
+        }
+
+        guard entry.type == .file, let url = mediaPreviewURL(for: entry) else {
+            return
+        }
+
+        let kind: FloatingMediaKind = isVideoPreviewURL(url) ? .fileVideo : .fileImage
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        guard let image = await FloatingMediaThumbnailer.shared.thumbnail(
+            for: url,
+            size: CGSize(width: 276, height: 228),
+            scale: scale
+        ) else {
+            return
+        }
+
+        guard !Task.isCancelled else {
+            return
+        }
+        floatingMediaPreviews[entry.id] = FloatingMediaPreview(image: image, kind: kind)
+    }
+
     private func recordLocal(_ entry: ClipboardEntry) async {
         do {
             let mutation = try await store.upsert(entry, maxEntries: PasteRuntimeSettings.current().maxEntries)
@@ -334,6 +394,7 @@ final class ClipboardAppModel: ObservableObject {
             } else if selectedID == nil || !loaded.contains(where: { $0.id == selectedID }) {
                 selectedID = filteredEntries.first?.id
             }
+            pruneFloatingMediaPreviews(validEntryIDs: Set(loaded.map(\.id)))
             updatePayloadCache(loaded)
             scheduleVisibleOCRIfNeeded(loaded)
         } catch {
@@ -354,6 +415,11 @@ final class ClipboardAppModel: ObservableObject {
 
     private func resetFloatingSelection() {
         selectedID = floatingEntries.first?.id
+    }
+
+    private func pruneFloatingMediaPreviews(validEntryIDs: Set<ClipboardEntry.ID>) {
+        floatingMediaPreviews = floatingMediaPreviews.filter { validEntryIDs.contains($0.key) }
+        queuedFloatingPreviewIDs = queuedFloatingPreviewIDs.filter { validEntryIDs.contains($0) }
     }
 
     private func scheduleVisibleOCRIfNeeded(_ entries: [ClipboardEntry]) {
@@ -417,5 +483,14 @@ final class ClipboardAppModel: ObservableObject {
         for window in NSApp.windows where window.title == "ClipLAN" {
             window.orderOut(nil)
         }
+    }
+
+    private static func isPreviewableMediaURL(_ url: URL) -> Bool {
+        guard url.isFileURL else {
+            return false
+        }
+
+        let pathExtension = url.pathExtension.lowercased()
+        return previewableImageExtensions.contains(pathExtension) || previewableVideoExtensions.contains(pathExtension)
     }
 }

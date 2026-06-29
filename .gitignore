@@ -1,0 +1,13 @@
+.DS_Store
+.codex/
+.build/
+dist/
+DerivedData/
+*.xcuserdata/
+*.dmg
+*.pkg
+*.zip
+*.keychain
+*.keychain-db
+*.mobileprovision
+*.provisionprofile

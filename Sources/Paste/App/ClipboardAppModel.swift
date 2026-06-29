@@ -20,6 +20,7 @@ final class ClipboardAppModel: ObservableObject {
     @Published var floatingQuery: String = "" {
         didSet {
             resetFloatingSelection()
+            warmFloatingMediaPreviews()
         }
     }
 
@@ -196,6 +197,7 @@ final class ClipboardAppModel: ObservableObject {
         floatingQuery = ""
         resetFloatingSelection()
         shouldResetFloatingSelectionAfterLoad = true
+        warmFloatingMediaPreviews()
     }
 
     func selectPreviousEntry() {
@@ -301,6 +303,17 @@ final class ClipboardAppModel: ObservableObject {
         floatingMediaPreviews[entry.id]
     }
 
+    func immediateFloatingMediaPreview(for entry: ClipboardEntry) -> FloatingMediaPreview? {
+        if let preview = floatingMediaPreviews[entry.id] {
+            return preview
+        }
+
+        guard entry.type == .image, let image = image(for: entry) else {
+            return nil
+        }
+        return FloatingMediaPreview(image: image, kind: .clipboardImage)
+    }
+
     func loadFloatingMediaPreview(for entry: ClipboardEntry) async {
         guard floatingMediaPreviews[entry.id] == nil, !queuedFloatingPreviewIDs.contains(entry.id) else {
             return
@@ -395,6 +408,7 @@ final class ClipboardAppModel: ObservableObject {
                 selectedID = filteredEntries.first?.id
             }
             pruneFloatingMediaPreviews(validEntryIDs: Set(loaded.map(\.id)))
+            warmFloatingMediaPreviews()
             updatePayloadCache(loaded)
             scheduleVisibleOCRIfNeeded(loaded)
         } catch {
@@ -415,6 +429,18 @@ final class ClipboardAppModel: ObservableObject {
 
     private func resetFloatingSelection() {
         selectedID = floatingEntries.first?.id
+    }
+
+    private func warmFloatingMediaPreviews() {
+        for entry in floatingEntries {
+            guard canPreviewMedia(entry), floatingMediaPreviews[entry.id] == nil else {
+                continue
+            }
+
+            Task { @MainActor [weak self] in
+                await self?.loadFloatingMediaPreview(for: entry)
+            }
+        }
     }
 
     private func pruneFloatingMediaPreviews(validEntryIDs: Set<ClipboardEntry.ID>) {
@@ -492,5 +518,16 @@ final class ClipboardAppModel: ObservableObject {
 
         let pathExtension = url.pathExtension.lowercased()
         return previewableImageExtensions.contains(pathExtension) || previewableVideoExtensions.contains(pathExtension)
+    }
+
+    private func canPreviewMedia(_ entry: ClipboardEntry) -> Bool {
+        switch entry.type {
+        case .image:
+            return !entry.needsPayload
+        case .file:
+            return mediaPreviewURL(for: entry) != nil
+        default:
+            return false
+        }
     }
 }

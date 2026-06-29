@@ -101,7 +101,7 @@ private struct FloatingEntryTile: View {
 
     var body: some View {
         Group {
-            if let preview = model.floatingMediaPreview(for: entry) {
+            if let preview = model.immediateFloatingMediaPreview(for: entry) {
                 mediaTile(preview)
             } else {
                 textTile
@@ -114,6 +114,11 @@ private struct FloatingEntryTile: View {
                 .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onAppear {
+            Task { @MainActor in
+                await model.loadFloatingMediaPreview(for: entry)
+            }
+        }
         .task(id: entry.id) {
             await model.loadFloatingMediaPreview(for: entry)
         }
@@ -216,7 +221,7 @@ private struct FloatingEntryTile: View {
     }
 
     private var borderColor: Color {
-        if model.floatingMediaPreview(for: entry) != nil, isSelected {
+        if model.immediateFloatingMediaPreview(for: entry) != nil, isSelected {
             return .indigo
         }
         return isSelected ? Color.white.opacity(0.18) : Color.primary.opacity(0.04)

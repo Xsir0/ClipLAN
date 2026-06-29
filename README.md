@@ -91,6 +91,10 @@ ClipLAN does not use cloud services and does not upload clipboard content. See [
 
 Unsigned `.pkg` installers are intentionally not the recommended distribution path for open source builds because macOS Installer and Gatekeeper expect a Developer ID Installer certificate. For local testing, prefer `dist/ClipLAN.app`, a zip, or a DMG.
 
+GitHub Actions builds `ClipLAN.dmg`, `ClipLAN.zip`, and `ClipLAN.pkg` on every push to `main`. The files are available from the workflow run artifacts. Pushing a tag such as `v0.1.0` also creates a GitHub Release and uploads the same artifacts.
+
+CI artifacts are unsigned/ad-hoc signed builds. Public binary distribution should use Developer ID signing and notarization.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

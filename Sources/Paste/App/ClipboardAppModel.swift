@@ -18,7 +18,7 @@ final class ClipboardAppModel: ObservableObject {
     @Published var peers: [PeerDevice] = []
     @Published var floatingQuery: String = "" {
         didSet {
-            alignFloatingSelection()
+            resetFloatingSelection()
         }
     }
 
@@ -36,6 +36,7 @@ final class ClipboardAppModel: ObservableObject {
     private var started = false
     private var pasteTargetApplication: NSRunningApplication?
     private var queuedOCRHashes = Set<String>()
+    private var shouldResetFloatingSelectionAfterLoad = false
 
     var filteredEntries: [ClipboardEntry] {
         entries.filter { filter.includes($0) }
@@ -185,7 +186,8 @@ final class ClipboardAppModel: ObservableObject {
         }
 
         floatingQuery = ""
-        alignFloatingSelection()
+        resetFloatingSelection()
+        shouldResetFloatingSelectionAfterLoad = true
     }
 
     func selectPreviousEntry() {
@@ -326,7 +328,10 @@ final class ClipboardAppModel: ObservableObject {
         do {
             let loaded = try await store.fetchEntries(query: query, limit: 200)
             entries = loaded
-            if selectedID == nil || !loaded.contains(where: { $0.id == selectedID }) {
+            if shouldResetFloatingSelectionAfterLoad {
+                shouldResetFloatingSelectionAfterLoad = false
+                resetFloatingSelection()
+            } else if selectedID == nil || !loaded.contains(where: { $0.id == selectedID }) {
                 selectedID = filteredEntries.first?.id
             }
             updatePayloadCache(loaded)
@@ -347,12 +352,8 @@ final class ClipboardAppModel: ObservableObject {
         syncPayloadCache.update(entries)
     }
 
-    private func alignFloatingSelection() {
-        let visibleEntries = floatingEntries
-        if let selectedID, visibleEntries.contains(where: { $0.id == selectedID }) {
-            return
-        }
-        selectedID = visibleEntries.first?.id
+    private func resetFloatingSelection() {
+        selectedID = floatingEntries.first?.id
     }
 
     private func scheduleVisibleOCRIfNeeded(_ entries: [ClipboardEntry]) {
